@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
 using Weterynaria.Data;
 using Microsoft.EntityFrameworkCore;
+using System.IdentityModel.Tokens.Jwt;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,15 +30,16 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+
     };
 });
+JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
 // Autoryzacja
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("UserAccess", policy => policy.RequireRole("Admin", "User"));
 });
 
 // Add services to the container.
@@ -53,19 +55,53 @@ builder.Services.AddSwaggerGen(options =>
     {
         Version = "v1",
         Title = "Serwis Weterynaryjny",
-        Description = "An ASP.NET Core Web API for managing ToDo items",
+        Description = "ASP.NET Core Web API dla serwisu weterynaryjnego",
     });
 
-    options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "Standard Authorization header using the Bearer scheme (\"bearer {token}\")",
-        In = ParameterLocation.Header,
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Bearer {token}\"",
         Name = "Authorization",
-        Type = SecuritySchemeType.ApiKey
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                },
+                Scheme = "oauth2",
+                Name = "Bearer",
+                In = ParameterLocation.Header
+            },
+            new List<string>()
+        }
     });
 });
 
 var app = builder.Build();
+
+app.UseStatusCodePages(async context =>
+{
+    var response = context.HttpContext.Response;
+    if (response.StatusCode == StatusCodes.Status403Forbidden)
+    {
+        response.ContentType = "application/json";
+        await response.WriteAsync("{\"error\":\"Nie masz wystarczającyh uprawnień.\"}");
+    }
+    if (response.StatusCode == StatusCodes.Status401Unauthorized)
+    {
+        response.ContentType = "application/json";
+        await response.WriteAsync("{\"error\":\"Nie jesteś zalogowany. Zaloguj się i spróbuj jeszcze raz.\"}");
+    }
+});
 
 using (var scope = app.Services.CreateScope())
 {

@@ -7,6 +7,11 @@ namespace Weterynaria.Data
         public string Description { get; set; } = string.Empty;
         public double Price { get; set; }
         public int AnimalId { get; set; }
-        public Animals Animal { get; set; } = null!;
+        public Animals? Animal { get; set; } = null!;
+
+        public int ServiceTypeId { get; set; }
+        public ServicesTypes? ServiceType { get; set; }
+
+        public bool IsConfirmed { get; set; } = false;
     }
 }
